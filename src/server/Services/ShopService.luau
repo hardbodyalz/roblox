@@ -9,6 +9,7 @@ local Net = require(Shared.Net)
 local DataService = require(script.Parent.DataService)
 local InventoryService = require(script.Parent.InventoryService)
 local FishingService = require(script.Parent.FishingService)
+local RodService = require(script.Parent.RodService)
 
 local ShopService = {}
 
@@ -30,12 +31,16 @@ function handlers.BuyRod(player: Player, payload: any)
 	if data.rods[rod.id] then
 		return false, "Already owned."
 	end
+	if FishingService.isBusy(player) then
+		return false, "Finish fishing first."
+	end
 	if not InventoryService.spend(player, rod.price) then
 		return false, "Not enough Yen."
 	end
 	data.rods[rod.id] = true
 	data.rod = rod.id
 	DataService.push(player, "rods", "rod")
+	RodService.refresh(player)
 	notify:FireClient(player, { title = "New rod!", text = rod.name .. " equipped." })
 	return true
 end
@@ -51,6 +56,7 @@ function handlers.EquipRod(player: Player, payload: any)
 	end
 	data.rod = id
 	DataService.push(player, "rod")
+	RodService.refresh(player)
 	return true
 end
 

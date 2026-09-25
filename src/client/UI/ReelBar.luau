@@ -1,7 +1,7 @@
 --!strict
--- The reel minigame. Hold (mouse / touch / space / gamepad A) to push the catch bar right,
--- release to let it drift back. Keep the Waifu marker inside the bar to fill the progress meter.
--- Parameters come from the server; it re-checks timing when you report success.
+-- The reel minigame, bottom-centre. Hold (mouse / touch / space / gamepad A or R2) to push your
+-- white bar right, release to let it drift back. Keep the Waifu inside it to fill the progress
+-- line underneath. Parameters come from the server; it re-checks timing when you report success.
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -9,7 +9,7 @@ local UserInputService = game:GetService("UserInputService")
 
 local Kit = require(script.Parent.Kit)
 
-local Minigame = {}
+local ReelBar = {}
 
 local player = Players.LocalPlayer
 local C = Kit.Colors
@@ -23,77 +23,83 @@ export type Params = {
 	start: number,
 	glitch: boolean,
 	overweight: boolean,
+	shakes: number,
 	intensity: number,
 }
 
 local ACCEL = 3.4
 local MAX_VEL = 1.5
 local BOUNCE = 0.35
+local TRACK_COLOR = Color3.fromRGB(10, 14, 22)
+local GLITCH_COLOR = Color3.fromRGB(70, 0, 20)
+local BOTTOM = -110
 
 local gui = Kit.new("ScreenGui", {
-	Name = "Minigame",
+	Name = "ReelBar",
 	ResetOnSpawn = false,
 	DisplayOrder = 20,
 	Enabled = false,
 	Parent = player:WaitForChild("PlayerGui"),
 })
 
-local panel = Kit.new("Frame", {
+local root = Kit.new("Frame", {
 	AnchorPoint = Vector2.new(0.5, 1),
-	Position = UDim2.new(0.5, 0, 1, -150),
-	Size = UDim2.fromOffset(560, 130),
-	BackgroundColor3 = C.panel,
-	BackgroundTransparency = 0.1,
+	Position = UDim2.new(0.5, 0, 1, BOTTOM),
+	Size = UDim2.new(0.42, 0, 0, 78),
+	BackgroundTransparency = 1,
 	Parent = gui,
-}, { Kit.corner(14), Kit.stroke(C.accent, 2, 0.3), Kit.new("UIScale") })
+}, { Kit.new("UISizeConstraint", { MinSize = Vector2.new(320, 78), MaxSize = Vector2.new(640, 78) }) })
 
-local title = Kit.label({
-	Text = "HOLD TO REEL",
-	Font = Kit.Font,
-	TextSize = 22,
+local title = Kit.hudLabel({
+	Text = "REEL",
+	FontFace = Kit.Title,
+	TextSize = 18,
 	TextXAlignment = Enum.TextXAlignment.Center,
-	Size = UDim2.new(1, 0, 0, 30),
-	Position = UDim2.fromOffset(0, 6),
-	Parent = panel,
+	Size = UDim2.new(1, 0, 0, 22),
+	Parent = root,
 })
 
 local track = Kit.new("Frame", {
-	Position = UDim2.fromOffset(20, 42),
-	Size = UDim2.new(1, -40, 0, 44),
-	BackgroundColor3 = Color3.fromRGB(20, 60, 90),
+	Position = UDim2.fromOffset(0, 26),
+	Size = UDim2.new(1, 0, 0, 30),
+	BackgroundColor3 = TRACK_COLOR,
+	BackgroundTransparency = 0.2,
 	ClipsDescendants = true,
-	Parent = panel,
-}, { Kit.corner(8), Kit.stroke(Color3.new(0, 0, 0), 2, 0.4) })
+	Parent = root,
+}, { Kit.corner(6), Kit.stroke(C.line, 1.5, 0.35) })
 
 local bar = Kit.new("Frame", {
 	Size = UDim2.fromScale(0.2, 1),
-	BackgroundColor3 = C.good,
-	BackgroundTransparency = 0.45,
+	BackgroundColor3 = Color3.new(1, 1, 1),
+	BackgroundTransparency = 0.55,
+	BorderSizePixel = 0,
 	Parent = track,
-}, { Kit.corner(6), Kit.stroke(Color3.new(1, 1, 1), 2, 0.3) })
+}, { Kit.corner(5), Kit.stroke(C.line, 1.5, 0.1) })
 
 local fish = Kit.label({
 	Text = "💗",
 	TextScaled = true,
 	TextXAlignment = Enum.TextXAlignment.Center,
 	AnchorPoint = Vector2.new(0.5, 0.5),
-	Size = UDim2.fromOffset(34, 34),
+	Size = UDim2.fromOffset(24, 24),
 	Position = UDim2.fromScale(0.5, 0.5),
 	ZIndex = 3,
 	Parent = track,
 })
 
 local progressTrack = Kit.new("Frame", {
-	Position = UDim2.fromOffset(20, 98),
-	Size = UDim2.new(1, -40, 0, 16),
-	BackgroundColor3 = C.panel3,
-	Parent = panel,
-}, { Kit.corner(8) })
+	Position = UDim2.fromOffset(0, 64),
+	Size = UDim2.new(1, 0, 0, 8),
+	BackgroundColor3 = TRACK_COLOR,
+	BackgroundTransparency = 0.3,
+	Parent = root,
+}, { Kit.corner(4), Kit.stroke(C.line, 1, 0.6) })
 local progressFill = Kit.new("Frame", {
 	Size = UDim2.fromScale(0.3, 1),
-	BackgroundColor3 = C.accent,
+	BackgroundColor3 = C.good,
+	BorderSizePixel = 0,
 	Parent = progressTrack,
-}, { Kit.corner(8) })
+}, { Kit.corner(4) })
 
 local holding = false
 local function isHoldInput(input: InputObject): boolean
@@ -116,8 +122,19 @@ UserInputService.InputEnded:Connect(function(input)
 	end
 end)
 
+local function titleFor(params: Params): (string, Color3)
+	if params.overweight then
+		return "TOO HEAVY FOR YOUR ROD!", C.bad
+	elseif params.intensity >= 3 then
+		return "SOMETHING HUGE IS FIGHTING!", C.bad
+	elseif params.intensity == 2 then
+		return "SHE'S PULLING HARD!", C.gold
+	end
+	return "REEL", C.text
+end
+
 -- Runs the minigame; yields until landed (true) or lost (false).
-function Minigame.play(params: Params): boolean
+function ReelBar.play(params: Params): boolean
 	local rng = Random.new()
 	local barPos = 0.5 - params.barWidth / 2
 	local barVel = 0
@@ -129,14 +146,12 @@ function Minigame.play(params: Params): boolean
 	holding = false
 
 	bar.Size = UDim2.fromScale(params.barWidth, 1)
-	title.Text = if params.overweight then "TOO HEAVY FOR YOUR ROD! HOLD ON!" elseif params.intensity >= 3 then "SOMETHING HUGE IS FIGHTING!" elseif params.intensity == 2 then "IT'S PULLING HARD!" else "HOLD TO REEL"
-	title.TextColor3 = if params.intensity >= 3 or params.overweight then C.bad elseif params.intensity == 2 then C.gold else C.text
-	panel.Position = UDim2.new(0.5, 0, 1, -150)
+	title.Text, title.TextColor3 = titleFor(params)
+	root.Position = UDim2.new(0.5, 0, 1, BOTTOM)
 	gui.Enabled = true
 
 	local result: boolean? = nil
-	local connection
-	connection = RunService.RenderStepped:Connect(function(dt)
+	local connection = RunService.RenderStepped:Connect(function(dt)
 		dt = math.min(dt, 1 / 20)
 
 		-- Catch bar physics
@@ -165,11 +180,12 @@ function Minigame.play(params: Params): boolean
 		-- Progress
 		local inside = fishPos >= barPos and fishPos <= barPos + params.barWidth
 		progress = math.clamp(progress + (if inside then params.gain else -params.loss) * dt, 0, 100)
-		bar.BackgroundColor3 = if inside then C.good else C.bad
+		bar.BackgroundTransparency = if inside then 0.45 else 0.7
 
 		bar.Position = UDim2.fromScale(barPos, 0)
 		fish.Position = UDim2.fromScale(fishPos, 0.5)
 		progressFill.Size = UDim2.fromScale(progress / 100, 1)
+		progressFill.BackgroundColor3 = C.bad:Lerp(C.good, progress / 100)
 
 		-- Shake for strong fighters; glitch for Corrupted.
 		local shake = if params.intensity >= 3 then 3 elseif params.intensity == 2 then 1.5 else 0
@@ -178,12 +194,12 @@ function Minigame.play(params: Params): boolean
 			if glitchTimer <= 0 then
 				glitchTimer = rng:NextNumber(0.05, 0.5)
 				fish.Text = if rng:NextNumber() < 0.3 then "▓" else "💗"
-				track.BackgroundColor3 = if rng:NextNumber() < 0.2 then Color3.fromRGB(80, 0, 20) else Color3.fromRGB(20, 60, 90)
+				track.BackgroundColor3 = if rng:NextNumber() < 0.2 then GLITCH_COLOR else TRACK_COLOR
 				fish.Visible = rng:NextNumber() > 0.15
 			end
 			shake += 2
 		end
-		panel.Position = UDim2.new(0.5, rng:NextNumber(-shake, shake), 1, -150 + rng:NextNumber(-shake, shake))
+		root.Position = UDim2.new(0.5, rng:NextNumber(-shake, shake), 1, BOTTOM + rng:NextNumber(-shake, shake))
 
 		if progress >= 100 then
 			result = true
@@ -198,14 +214,10 @@ function Minigame.play(params: Params): boolean
 	connection:Disconnect()
 	fish.Visible = true
 	fish.Text = "💗"
-	track.BackgroundColor3 = Color3.fromRGB(20, 60, 90)
+	track.BackgroundColor3 = TRACK_COLOR
 	gui.Enabled = false
 	holding = false
 	return result :: boolean
 end
 
-function Minigame.isOpen(): boolean
-	return gui.Enabled
-end
-
-return Minigame
+return ReelBar

@@ -22,7 +22,7 @@ local InventoryWindow: any = {}
 local C = Kit.Colors
 local PAGE_SIZE = 40
 
-local handle = Window.create("Inventory", "🎒 Catches", Vector2.new(820, 560))
+local handle = Window.create("Inventory", "Catches", Vector2.new(820, 560))
 local content = handle.content
 
 local SORTS = {
@@ -44,7 +44,7 @@ end)
 setSort(sortBy)
 toolbar:FindFirstChildOfClass("ScrollingFrame").Size = UDim2.new(1, -330, 1, 0)
 
-local sellDupes = Kit.button("Sell Duplicates", C.gold, { Size = UDim2.fromOffset(150, 34), AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -160, 0, 0), TextSize = 16, Parent = toolbar })
+local sellDupes = Kit.button("Sell Duplicates", C.gold, { TextColor3 = C.panel, Size = UDim2.fromOffset(150, 34), AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -160, 0, 0), TextSize = 16, Parent = toolbar })
 local sellAll = Kit.button("Sell All", C.bad, { Size = UDim2.fromOffset(150, 34), AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, 0, 0, 0), TextSize = 16, Parent = toolbar })
 
 local footer = Kit.new("Frame", { BackgroundTransparency = 1, AnchorPoint = Vector2.new(0, 1), Position = UDim2.fromScale(0, 1), Size = UDim2.new(1, 0, 0, 34), Parent = content })
@@ -96,18 +96,19 @@ local function card(uid: string, item: any, order: number)
 	local mutation = Mutations.byId[item.m]
 	local frame = Kit.new("Frame", {
 		BackgroundColor3 = C.panel2,
+		BackgroundTransparency = 0.1,
 		LayoutOrder = order,
 		Parent = grid,
-	}, { Kit.corner(10), Kit.stroke(rarity.color, 2, 0.2) })
+	}, { Kit.corner(6), Kit.stroke(rarity.color, 1.5, 0.3) })
 	local holder = Kit.new("Frame", { BackgroundTransparency = 1, Position = UDim2.fromOffset(34, 6), Size = UDim2.fromOffset(80, 80), Parent = frame })
 	Portrait.create(item.c, item.m).Parent = holder
-	Kit.label({ Text = character.name, Font = Kit.Font, TextSize = 15, TextColor3 = rarity.color, TextXAlignment = Enum.TextXAlignment.Center, Position = UDim2.fromOffset(4, 88), Size = UDim2.new(1, -8, 0, 18), TextScaled = true, Parent = frame })
+	Kit.label({ Text = character.name, FontFace = Kit.Title, TextSize = 15, TextColor3 = rarity.color, TextXAlignment = Enum.TextXAlignment.Center, Position = UDim2.fromOffset(4, 88), Size = UDim2.new(1, -8, 0, 18), TextScaled = true, Parent = frame })
 	local mutationText = if mutation.id == "Normal" then Kit.color(rarity.name, C.muted) else Kit.color(mutation.name, mutation.color) .. " " .. Kit.color(rarity.name, C.muted)
-	Kit.label({ Text = mutationText, TextSize = 13, Font = Kit.Bold, TextXAlignment = Enum.TextXAlignment.Center, Position = UDim2.fromOffset(4, 108), Size = UDim2.new(1, -8, 0, 16), Parent = frame })
+	Kit.label({ Text = mutationText, TextSize = 13, FontFace = Kit.Bold, TextXAlignment = Enum.TextXAlignment.Center, Position = UDim2.fromOffset(4, 108), Size = UDim2.new(1, -8, 0, 16), Parent = frame })
 	Kit.label({ Text = Format.kg(item.w) .. " · " .. Kit.color(Format.yen(item.v), C.gold), TextSize = 13, TextXAlignment = Enum.TextXAlignment.Center, Position = UDim2.fromOffset(4, 126), Size = UDim2.new(1, -8, 0, 16), Parent = frame })
 
-	local lock = Kit.button(if item.l then "🔒" else "🔓", if item.l then C.accent2 else C.panel3, { Size = UDim2.fromOffset(40, 32), Position = UDim2.fromOffset(8, 154), TextSize = 16, Parent = frame })
-	local sell = Kit.button(if item.l then "Locked" else "Sell", if item.l then C.panel3 else C.gold, { Size = UDim2.fromOffset(84, 32), Position = UDim2.fromOffset(56, 154), TextSize = 15, Parent = frame })
+	local lock = Kit.button(if item.l then "🔒" else "🔓", if item.l then C.accent else C.panel3, { Size = UDim2.fromOffset(40, 32), Position = UDim2.fromOffset(8, 154), TextSize = 16, Parent = frame })
+	local sell = Kit.button(if item.l then "Locked" else "Sell", if item.l then C.panel3 else C.gold, { TextColor3 = if item.l then C.text else C.panel, Size = UDim2.fromOffset(84, 32), Position = UDim2.fromOffset(56, 154), TextSize = 15, Parent = frame })
 	lock.Activated:Connect(function()
 		Remote.request("ToggleLock", { uid = uid })
 	end)

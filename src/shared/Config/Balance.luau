@@ -7,6 +7,33 @@ return {
 	-- Base seconds before a bite, before rod speed and passives.
 	BITE_DELAY = { 3, 8 },
 
+	-- Casting. Hold to charge; the meter swings 0 -> 1 -> 0 at CHARGE_SPEED per second.
+	-- Distance = lerp(CAST_MIN_RANGE, rod.castRange, power).
+	CHARGE_SPEED = 1.1,
+	CAST_MIN_RANGE = 6,
+	-- Power at or above this is a Perfect Cast: more Luck and a faster bite.
+	PERFECT_CAST = 0.92,
+	PERFECT_LUCK_MULT = 1.2,
+	PERFECT_BITE_SPEED = 0.25,
+	-- The server accepts casts this many studs past the rod's range (latency / movement).
+	CAST_RANGE_MARGIN = 12,
+	-- Walking this far past your rod's range from the bobber reels the line in.
+	LINE_SNAP_MARGIN = 20,
+
+	-- Shake phase between the bite and the reel: click the SHAKE prompts.
+	-- Count per rarity difficulty; each 40 rod Control removes one (minimum 1).
+	Shakes = {
+		Charming = 2, Alluring = 3, Enchanting = 3, Bewitching = 4,
+		Divine = 5, Eternal = 6, Corrupted = 6, Mystery = 7,
+	},
+	SHAKE_CONTROL_STEP = 40,
+	SHAKE_TIMEOUT = 8, -- seconds for the whole shake phase before she slips away
+
+	-- Open water: far from any shore the ocean is deep. Secrets surface more often there.
+	DEEP_WATER_DISTANCE = 220, -- studs past an island's shoreline
+	DEEP_WATER_LUCK = 10,
+	DEEP_WATER_SECRET_MULT = 3,
+
 	-- Weight roll: min + (max - min) * r ^ WEIGHT_SKEW. Higher = heavy catches rarer.
 	WEIGHT_SKEW = 2.4,
 

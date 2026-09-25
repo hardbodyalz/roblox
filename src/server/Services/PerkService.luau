@@ -8,6 +8,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage.Shared
 local Monetization = require(Shared.Config.Monetization)
+local Modifiers = require(Shared.Modifiers)
 local Clock = require(Shared.Clock)
 local Net = require(Shared.Net)
 local DataService = require(script.Parent.DataService)
@@ -43,16 +44,9 @@ local function boostActive(player: Player, boost: string): boolean
 	return data ~= nil and (data.boosts[boost] or 0) > os.time()
 end
 
-function PerkService.perks(player: Player)
+function PerkService.perks(player: Player): Modifiers.Perks
 	local data = DataService.get(player)
-	return {
-		doubleLuck = PerkService.owns(player, "DoubleLuck"),
-		doubleMutation = PerkService.owns(player, "DoubleMutation"),
-		fastReel = PerkService.owns(player, "FastReel"),
-		luckBoost = boostActive(player, "Luck"),
-		mutationBoost = boostActive(player, "Mutation"),
-		collectorBoost = data ~= nil and data.collectorEnds > os.time(),
-	}
+	return Modifiers.perksFrom(PerkService.passes(player), if data then data.boosts else {}, if data then data.collectorEnds else 0, os.time())
 end
 
 function PerkService.yenMult(player: Player): number

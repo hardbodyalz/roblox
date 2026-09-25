@@ -1,12 +1,14 @@
 --!strict
--- Folds everything that affects a cast (rod, boat, bait, spot, weather, events, passives, passes,
--- boosts) into one Mods table. Shared so the client can show the same Luck number the server uses.
+-- Folds everything that affects a cast (rod, boat, bait, where the bobber landed, weather, events,
+-- passives, passes, boosts) into one Mods table. Shared so the client can show the same Luck number
+-- the server uses.
 
 local Config = script.Parent.Config
 local Equipment = require(Config.Equipment)
 local Islands = require(Config.Islands)
 local Weather = require(Config.Weather)
 local Monetization = require(Config.Monetization)
+local Balance = require(Config.Balance)
 
 export type Env = {
 	weather: string,
@@ -14,6 +16,20 @@ export type Env = {
 	moonPhase: string,
 	demonTide: boolean,
 	serverLuck: boolean,
+}
+
+export type Loadout = {
+	rod: string,
+	boat: string,
+	bait: string,
+}
+
+-- Where (and how well) the line went in.
+export type Cast = {
+	island: string?,
+	spot: string?, -- hotspot the bobber landed in
+	deep: boolean?, -- open water far from shore
+	perfect: boolean?, -- Perfect Cast
 }
 
 export type Perks = {
@@ -38,6 +54,7 @@ export type Mods = {
 	resilience: number,
 	maxKg: number,
 	reelMult: number,
+	secretMult: number, -- weight multiplier for the world-wide secret table
 	isNight: boolean,
 	moonPhase: string,
 }
@@ -56,12 +73,25 @@ local function mulAll(map: { [string]: number }, source: { [string]: number }?)
 	end
 end
 
-function Modifiers.compute(rodId: string, boatId: string, baitId: string, spotId: string, env: Env, perks: Perks): Mods
-	local rod = Equipment.rodsById[rodId] or Equipment.rodsById.old_rod
-	local boat = Equipment.boatsById[boatId] or Equipment.boatsById.old_minnow
-	local bait = Equipment.baitsById[baitId] or Equipment.baitsById.normal
-	local spot = Islands.spotsById[spotId]
-	local island = spot and Islands.islandOfSpot[spotId]
+-- Perks from a profile-shaped table. The server passes live gamepass ownership; the client its
+-- replicated copy, so both agree.
+function Modifiers.perksFrom(passes: { [string]: boolean }, boosts: { [string]: number }, collectorEnds: number, now: number): Perks
+	return {
+		doubleLuck = passes.DoubleLuck == true,
+		doubleMutation = passes.DoubleMutation == true,
+		fastReel = passes.FastReel == true,
+		luckBoost = (boosts.Luck or 0) > now,
+		mutationBoost = (boosts.Mutation or 0) > now,
+		collectorBoost = collectorEnds > now,
+	}
+end
+
+function Modifiers.compute(loadout: Loadout, cast: Cast, env: Env, perks: Perks): Mods
+	local rod = Equipment.rodsById[loadout.rod] or Equipment.rodsById.old_rod
+	local boat = Equipment.boatsById[loadout.boat] or Equipment.boatsById.old_minnow
+	local bait = Equipment.baitsById[loadout.bait] or Equipment.baitsById.normal
+	local spot = if cast.spot then Islands.spotsById[cast.spot] else nil
+	local island = if cast.island then Islands.byId[cast.island] else nil
 	local weather = Weather.byId[env.weather] or Weather.byId.Sunny
 
 	local isNight = env.isNight or (island ~= nil and island.permanentNight == true)
@@ -80,9 +110,20 @@ function Modifiers.compute(rodId: string, boatId: string, baitId: string, spotId
 		resilience = rod.resilience,
 		maxKg = rod.maxKg,
 		reelMult = 1,
+		secretMult = 1,
 		isNight = isNight,
 		moonPhase = env.moonPhase,
 	}
+
+	-- How the line went in
+	if cast.deep then
+		mods.baseLuck += Balance.DEEP_WATER_LUCK
+		mods.secretMult *= Balance.DEEP_WATER_SECRET_MULT
+	end
+	if cast.perfect then
+		mods.luckMult *= Balance.PERFECT_LUCK_MULT
+		mods.biteSpeed += Balance.PERFECT_BITE_SPEED
+	end
 
 	-- Spot, bait, weather
 	if spot then

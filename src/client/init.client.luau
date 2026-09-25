@@ -4,22 +4,26 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local StarterGui = game:GetService("StarterGui")
 
-local Islands = require(ReplicatedStorage.Shared.Config.Islands)
+local Shared = ReplicatedStorage.Shared
+local Islands = require(Shared.Config.Islands)
+local Zones = require(Shared.Zones)
 
 local State = require(script.State)
 local Remote = require(script.Remote)
+local LocalCharacter = require(script.LocalCharacter)
 local Fishing = require(script.Fishing)
-local Atmosphere = require(script.Atmosphere)
+local Atmosphere = require(script.Visuals.Atmosphere)
 local UI = script.UI
 local Notices = require(UI.Notices)
 local Hud = require(UI.Hud)
 local Tutorial = require(UI.Tutorial)
-local SailWindow = require(UI.SailWindow)
+require(UI.SailWindow)
 require(UI.InventoryWindow)
 require(UI.CollectionWindow)
 require(UI.ShopWindow)
 require(UI.AchievementsWindow)
 
+-- The HUD has its own rod slot.
 pcall(function()
 	StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.Backpack, false)
 end)
@@ -30,21 +34,29 @@ Atmosphere.start()
 Fishing.start()
 Hud.bindFishing(Fishing)
 Hud.start()
-SailWindow.setIslandGetter(Hud.currentIsland)
 
 State.wait()
 Tutorial.start()
 
--- Island arrival toasts.
-local lastIsland: string? = nil
+-- Zone titles: arriving at an island, or heading out into open water.
+local lastZone: string? = nil
 while true do
 	task.wait(1)
-	local id = Hud.currentIsland()
-	if id and id ~= lastIsland then
-		local island = Islands.byId[id]
-		if lastIsland ~= nil then
-			Notices.announce({ title = string.upper(island.name), text = island.blurb, color = Color3.fromRGB(255, 200, 230), quiet = true })
+	local root = LocalCharacter.root()
+	if root then
+		local islandId = LocalCharacter.island()
+		local zone = Zones.at(root.Position)
+		local key = if islandId then islandId elseif zone.deep then "deep" else lastZone
+		if key ~= lastZone then
+			if lastZone ~= nil then
+				if key == "deep" then
+					Notices.zone("Open Sea", "Deep water. Secrets surface more often out here.", Color3.fromRGB(150, 210, 255))
+				elseif key and Islands.byId[key] then
+					local island = Islands.byId[key]
+					Notices.zone(island.name, island.blurb)
+				end
+			end
+			lastZone = key
 		end
-		lastIsland = id
 	end
 end

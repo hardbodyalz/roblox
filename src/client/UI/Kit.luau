@@ -1,26 +1,40 @@
 --!strict
--- Small UI toolkit: instance builder, theme colours and common widgets.
+-- Small UI toolkit: instance builder, theme and common widgets. The look is deliberately quiet:
+-- dark translucent panels, thin white outlines, white text with a stroke over the world.
 
 local TweenService = game:GetService("TweenService")
 
 local Kit = {}
 
+local rgb = Color3.fromRGB
+
 Kit.Colors = {
-	panel = Color3.fromRGB(24, 20, 36),
-	panel2 = Color3.fromRGB(38, 32, 56),
-	panel3 = Color3.fromRGB(54, 46, 78),
-	text = Color3.fromRGB(245, 240, 255),
-	muted = Color3.fromRGB(170, 160, 195),
-	accent = Color3.fromRGB(255, 120, 180),
-	accent2 = Color3.fromRGB(140, 110, 255),
-	good = Color3.fromRGB(110, 225, 140),
-	bad = Color3.fromRGB(255, 90, 100),
-	gold = Color3.fromRGB(255, 210, 90),
+	panel = rgb(14, 18, 26),
+	panel2 = rgb(26, 32, 44),
+	panel3 = rgb(42, 50, 66),
+	line = rgb(255, 255, 255),
+	text = rgb(245, 247, 250),
+	muted = rgb(150, 160, 178),
+	accent = rgb(90, 180, 255),
+	pink = rgb(255, 120, 180),
+	good = rgb(95, 215, 130),
+	bad = rgb(240, 85, 95),
+	gold = rgb(255, 205, 85),
 }
 
-Kit.Font = Enum.Font.FredokaOne
-Kit.Body = Enum.Font.GothamMedium
-Kit.Bold = Enum.Font.GothamBold
+local FAMILY = "rbxasset://fonts/families/BuilderSans.json"
+Kit.Title = Font.new(FAMILY, Enum.FontWeight.Heavy)
+Kit.Bold = Font.new(FAMILY, Enum.FontWeight.Bold)
+Kit.Body = Font.new(FAMILY, Enum.FontWeight.Medium)
+
+local function merge(defaults: { [string]: any }, props: { [string]: any }?): { [string]: any }
+	if props then
+		for k, v in props do
+			defaults[k] = v
+		end
+	end
+	return defaults
+end
 
 -- new("Frame", { Size = ..., Parent = ... }, { children })
 function Kit.new(className: string, props: { [string]: any }?, children: { any }?): any
@@ -47,14 +61,14 @@ function Kit.new(className: string, props: { [string]: any }?, children: { any }
 end
 
 function Kit.corner(radius: number?): any
-	return Kit.new("UICorner", { CornerRadius = UDim.new(0, radius or 10) })
+	return Kit.new("UICorner", { CornerRadius = UDim.new(0, radius or 8) })
 end
 
 function Kit.stroke(color: Color3?, thickness: number?, transparency: number?): any
 	return Kit.new("UIStroke", {
-		Color = color or Color3.new(0, 0, 0),
-		Thickness = thickness or 2,
-		Transparency = transparency or 0,
+		Color = color or Kit.Colors.line,
+		Thickness = thickness or 1,
+		Transparency = transparency or 0.85,
 		ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
 	})
 end
@@ -73,38 +87,52 @@ function Kit.list(padding: number?, horizontal: boolean?, align: Enum.Horizontal
 	})
 end
 
+-- Dark translucent panel with a hairline outline.
+function Kit.panel(props: { [string]: any }?, children: { any }?): any
+	local frame = Kit.new("Frame", merge({
+		BackgroundColor3 = Kit.Colors.panel,
+		BackgroundTransparency = 0.2,
+		BorderSizePixel = 0,
+	}, props), children)
+	Kit.corner(8).Parent = frame
+	Kit.stroke().Parent = frame
+	return frame
+end
+
 function Kit.label(props: { [string]: any }): any
-	local defaults = {
+	return Kit.new("TextLabel", merge({
 		BackgroundTransparency = 1,
-		Font = Kit.Body,
+		FontFace = Kit.Body,
 		TextColor3 = Kit.Colors.text,
 		TextSize = 16,
 		TextXAlignment = Enum.TextXAlignment.Left,
 		TextWrapped = true,
 		RichText = true,
-	}
-	for k, v in props do
-		defaults[k] = v
-	end
-	return Kit.new("TextLabel", defaults)
+	}, props))
+end
+
+-- White text with a dark outline, for labels that sit straight on the 3D view.
+function Kit.hudLabel(props: { [string]: any }): any
+	return Kit.label(merge({
+		FontFace = Kit.Bold,
+		TextStrokeTransparency = 0.35,
+		TextStrokeColor3 = Color3.new(0, 0, 0),
+	}, props))
 end
 
 function Kit.button(text: string, color: Color3?, props: { [string]: any }?): TextButton
-	local defaults: { [string]: any } = {
+	local button = Kit.new("TextButton", merge({
 		Text = text,
-		Font = Kit.Font,
-		TextSize = 18,
-		TextColor3 = Color3.new(1, 1, 1),
-		BackgroundColor3 = color or Kit.Colors.accent,
+		FontFace = Kit.Bold,
+		TextSize = 16,
+		TextColor3 = Kit.Colors.text,
+		BackgroundColor3 = color or Kit.Colors.panel3,
 		AutoButtonColor = true,
-		Size = UDim2.fromOffset(120, 38),
-	}
-	if props then
-		for k, v in props do
-			defaults[k] = v
-		end
-	end
-	local button = Kit.new("TextButton", defaults, { Kit.corner(8), Kit.stroke(Color3.new(0, 0, 0), 2, 0.6) })
+		BorderSizePixel = 0,
+		Size = UDim2.fromOffset(120, 36),
+	}, props))
+	Kit.corner(6).Parent = button
+	Kit.stroke(Kit.Colors.line, 1, 0.8).Parent = button
 	return button
 end
 
@@ -141,6 +169,24 @@ function Kit.gradient(c1: Color3, c2: Color3, animate: boolean?): any
 		end)
 	end
 	return g
+end
+
+-- Scales a frame down to fit small screens.
+function Kit.fitToScreen(frame: GuiObject, size: Vector2, margin: Vector2?)
+	local scale = Kit.new("UIScale", { Parent = frame })
+	local pad = margin or Vector2.new(20, 60)
+	local function fit()
+		local camera = workspace.CurrentCamera
+		if camera then
+			local vp = camera.ViewportSize
+			scale.Scale = math.min(1, (vp.X - pad.X) / size.X, (vp.Y - pad.Y) / size.Y)
+		end
+	end
+	fit()
+	if workspace.CurrentCamera then
+		workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(fit)
+	end
+	return scale
 end
 
 return Kit

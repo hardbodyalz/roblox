@@ -1,15 +1,16 @@
 --!strict
--- Fishing locations. Every island has its own character table, and every spot on an
--- island can tilt that table (bonus Luck, mutation weighting, or a boosted tag).
+-- Islands and their waters. You can cast into any water in the world: the island whose shore
+-- is nearest decides the character table, and hotspots tilt it (bonus Luck, mutation
+-- weighting, or a boosted tag).
 --
 -- table entries: { id, w } where w is the base encounter weight (only relative size matters).
 --   weather = only fishable during these weather events
 --   moon    = only fishable during these moon phases
 --   moonBoost = weight multiplier per moon phase
 --
--- Spots are placed by polar coordinates around the island centre so the world builder and the
--- fishing code agree on where they are. kind "dock" builds a pier out into the sea; "pond" builds
--- a pool on the island itself.
+-- Spots are hotspots placed by polar coordinates around the island centre so the world builder
+-- and the fishing code agree on where they are. kind "dock" builds a pier with a hotspot in the
+-- sea off its end; "pond" builds a pool on the island itself.
 
 export type TableEntry = {
 	id: string,
@@ -182,6 +183,23 @@ local function spotPosition(island: Island, spot: Spot): Vector3
 	return island.center + Vector3.new(math.cos(a) * spot.dist, 0, math.sin(a) * spot.dist)
 end
 
+local DOCK_HOTSPOT_OFFSET = 30
+local HOTSPOT_RADIUS = { dock = 26, pond = 16 }
+
+-- Centre of the water a spot's bonus applies to: off the end of a pier, or the pond itself.
+local function hotspotCenter(island: Island, spot: Spot): Vector3
+	local p = spotPosition(island, spot)
+	if spot.kind == "dock" then
+		local a = math.rad(spot.angle)
+		return p + Vector3.new(math.cos(a), 0, math.sin(a)) * DOCK_HOTSPOT_OFFSET
+	end
+	return p
+end
+
+local function hotspotRadius(spot: Spot): number
+	return HOTSPOT_RADIUS[spot.kind] or 20
+end
+
 local function arrivalPosition(island: Island): Vector3
 	-- Just inside the shore toward the first spot.
 	local first = island.spots[1]
@@ -190,11 +208,41 @@ local function arrivalPosition(island: Island): Vector3
 	return island.center + Vector3.new(math.cos(a) * r, 0, math.sin(a) * r)
 end
 
+local function flatDistance(a: Vector3, b: Vector3): number
+	return Vector3.new(a.X - b.X, 0, a.Z - b.Z).Magnitude
+end
+
 local function islandAt(position: Vector3): Island?
 	for _, island in list do
-		local flat = Vector3.new(position.X - island.center.X, 0, position.Z - island.center.Z)
-		if flat.Magnitude < island.radius + 90 and math.abs(position.Y - island.center.Y) < 150 then
+		if flatDistance(position, island.center) < island.radius + 90 and math.abs(position.Y - island.center.Y) < 150 then
 			return island
+		end
+	end
+	return nil
+end
+
+-- Whose waters is this? The island with the nearest shoreline on the same level, so the sea
+-- beneath Celestial Haven still belongs to the islands down below.
+-- Returns the island and how far past its shoreline the point is (negative = inland pond).
+local function zoneAt(position: Vector3, include: ((Island) -> boolean)?): (Island?, number)
+	local best, bestGap = nil, math.huge
+	for _, island in list do
+		if math.abs(position.Y - island.center.Y) > 120 or (include and not include(island)) then
+			continue
+		end
+		local gap = flatDistance(position, island.center) - island.radius
+		if gap < bestGap then
+			best, bestGap = island, gap
+		end
+	end
+	return best, bestGap
+end
+
+local function hotspotAt(island: Island, position: Vector3): Spot?
+	for _, spot in island.spots do
+		local center = hotspotCenter(island, spot)
+		if flatDistance(position, center) <= hotspotRadius(spot) and math.abs(position.Y - center.Y) < 20 then
+			return spot
 		end
 	end
 	return nil
@@ -207,8 +255,11 @@ return {
 	islandOfSpot = islandOfSpot,
 	globalTable = globalTable,
 	MOON_PHASES = MOON_PHASES,
-	SPOT_RADIUS = 20,
 	spotPosition = spotPosition,
+	hotspotCenter = hotspotCenter,
+	hotspotRadius = hotspotRadius,
 	arrivalPosition = arrivalPosition,
 	islandAt = islandAt,
+	zoneAt = zoneAt,
+	hotspotAt = hotspotAt,
 }
