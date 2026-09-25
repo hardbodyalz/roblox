@@ -1,6 +1,9 @@
 --!strict
--- Cast -> bite -> minigame -> catch. All RNG happens here; the client only ever learns what it
+-- Cast -> bite -> shake + reel -> catch. All RNG happens here; the client only ever learns what it
 -- needs to play the minigame until the catch is landed.
+--
+-- Casting works in any water: the client sends where its bobber landed, and the server checks it
+-- is water, within the rod's range, and in waters the player's boat can reach.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -10,7 +13,6 @@ local Config = Shared.Config
 local Characters = require(Config.Characters)
 local Rarities = require(Config.Rarities)
 local Mutations = require(Config.Mutations)
-local Islands = require(Config.Islands)
 local Equipment = require(Config.Equipment)
 local Balance = require(Config.Balance)
 local Modifiers = require(Shared.Modifiers)
@@ -18,16 +20,23 @@ local Roll = require(Shared.Roll)
 local Clock = require(Shared.Clock)
 local Format = require(Shared.Format)
 local Net = require(Shared.Net)
+local Water = require(Shared.Water)
+local Zones = require(Shared.Zones)
+local Travel = require(Shared.Travel)
 
 local DataService = require(script.Parent.DataService)
 local PerkService = require(script.Parent.PerkService)
 local AchievementService = require(script.Parent.AchievementService)
 local StorageRules = require(script.Parent.StorageRules)
+local RodService = require(script.Parent.RodService)
+local Leaderstats = require(script.Parent.Leaderstats)
 
-type Pending = {
+type Session = {
 	token: number,
 	state: string, -- "waiting" | "reeling"
-	spotId: string,
+	target: Vector3,
+	islandId: string,
+	spotId: string?,
 	characterId: string?,
 	mutationId: string?,
 	kg: number?,
@@ -39,30 +48,26 @@ type Pending = {
 local FishingService = {}
 
 local rng = Random.new()
-local sessions: { [Player]: Pending } = {}
+local sessions: { [Player]: Session } = {}
 local nextToken = 0
 
 local biteEvent = Net.event("Bite")
-local catchEvent = Net.event("CatchResult")
+local fxEvent = Net.event("FishingFx")
 local announceEvent = Net.event("Announce")
 local notifyEvent = Net.event("Notify")
 
-local function nearSpot(player: Player, spotId: string): boolean
-	local spot = Islands.spotsById[spotId]
-	local island = Islands.islandOfSpot[spotId]
+local function rootOf(player: Player): BasePart?
 	local character = player.Character
-	local root = character and character:FindFirstChild("HumanoidRootPart") :: BasePart?
-	if not spot or not island or not root then
-		return false
-	end
-	local target = Islands.spotPosition(island, spot)
-	local flat = Vector3.new(root.Position.X - target.X, 0, root.Position.Z - target.Z)
-	-- Generous margin for latency; the client uses SPOT_RADIUS.
-	return flat.Magnitude <= Islands.SPOT_RADIUS + 12 and math.abs(root.Position.Y - target.Y) < 40
+	return character and character:FindFirstChild("HumanoidRootPart") :: BasePart?
 end
 
-local function modsFor(player: Player, data: DataService.Profile, spotId: string)
-	return Modifiers.compute(data.rod, data.boat, data.baitEquipped, spotId, Clock.env(), PerkService.perks(player))
+local function isFinite(v: Vector3): boolean
+	for _, n in { v.X, v.Y, v.Z } do
+		if n ~= n or math.abs(n) == math.huge then
+			return false
+		end
+	end
+	return true
 end
 
 local function minigameParams(characterId: string, kg: number, mods: Modifiers.Mods)
@@ -84,6 +89,7 @@ local function minigameParams(characterId: string, kg: number, mods: Modifiers.M
 		start = Balance.MINIGAME_START_PROGRESS,
 		glitch = base.glitch == true,
 		overweight = overweight,
+		shakes = math.max(1, Balance.Shakes[rarity.difficulty] - math.floor(mods.control / Balance.SHAKE_CONTROL_STEP)),
 		-- Flavour only: how hard it's fighting. Deliberately vague about the actual rarity.
 		intensity = if rarity.order >= 6 then 3 elseif rarity.order >= 4 then 2 else 1,
 	}
@@ -141,7 +147,7 @@ local function announceCatch(player: Player, item: DataService.Item)
 	})
 end
 
-local function land(player: Player, data: DataService.Profile, session: Pending)
+local function land(player: Player, data: DataService.Profile, session: Session)
 	local characterId = session.characterId :: string
 	local mutationId = session.mutationId :: string
 	local kg = session.kg :: number
@@ -162,6 +168,7 @@ local function land(player: Player, data: DataService.Profile, session: Pending)
 		w = kg,
 		v = value,
 		l = false,
+		i = session.islandId,
 		s = session.spotId,
 		x = session.weather or "Sunny",
 		t = os.time(),
@@ -186,26 +193,27 @@ local function land(player: Player, data: DataService.Profile, session: Pending)
 		end
 	end
 	DataService.push(player, "catches", "best", "collectorCount", "collectorEnds")
+	Leaderstats.set(player, "Caught", data.catches)
 
-	local leaderstats = player:FindFirstChild("leaderstats")
-	local caught = leaderstats and leaderstats:FindFirstChild("Caught") :: IntValue?
-	if caught then
-		caught.Value = data.catches
-	end
+	-- Everyone nearby sees her surface.
+	fxEvent:FireAllClients({ kind = "catch", userId = player.UserId, target = session.target, c = characterId, m = mutationId, w = kg })
+	announceCatch(player, item)
+	AchievementService.check(player)
 
-	catchEvent:FireClient(player, {
+	return {
 		uid = uid,
 		item = item,
 		newCharacter = newCharacter,
 		newMutation = newMutation,
 		storageFull = StorageRules.isFull(player),
-	})
-	announceCatch(player, item)
-	AchievementService.check(player)
+	}
 end
 
 local function cancel(player: Player)
-	sessions[player] = nil
+	if sessions[player] then
+		sessions[player] = nil
+		fxEvent:FireAllClients({ kind = "clear", userId = player.UserId })
+	end
 end
 
 function FishingService.cancel(player: Player)
@@ -225,33 +233,54 @@ function handlers.Cast(player: Player, payload: any)
 	if not data then
 		return false, "Loading..."
 	end
-	if sessions[player] then
-		return false, "Already fishing."
+	local target = if type(payload) == "table" then payload.target else nil
+	if typeof(target) ~= "Vector3" or not isFinite(target) then
+		return false, "Bad cast."
 	end
-	local spotId = type(payload) == "table" and payload.spotId
-	if type(spotId) ~= "string" or not Islands.spotsById[spotId] then
-		return false, "Not at a fishing spot."
+	local root = rootOf(player)
+	if not root or not RodService.holding(player) then
+		return false, "Equip your rod first."
 	end
-	if not nearSpot(player, spotId) then
-		return false, "Move closer to the fishing spot."
+	local rod = Equipment.rodsById[data.rod] or Equipment.rodsById.old_rod
+	local offset = target - root.Position
+	if Vector3.new(offset.X, 0, offset.Z).Magnitude > rod.castRange + Balance.CAST_RANGE_MARGIN or math.abs(offset.Y) > 60 then
+		return false, "That's out of your rod's range."
 	end
-	local island = Islands.islandOfSpot[spotId]
-	if island.event and not ReplicatedStorage:GetAttribute("EventActive") then
-		return false, "This event has ended."
+	if not Water.isWater(target) then
+		return false, "You can only fish in water!"
+	end
+	local zone = Zones.at(target)
+	local island = zone.island
+	if not island then
+		return false, "Nothing bites here."
+	end
+	if not Travel.canReach(data.boat, island.id) then
+		return false, string.format("These waters need a boat with %d+ Speed.", island.minBoatSpeed)
 	end
 	if StorageRules.isFull(player) then
 		return false, "Storage full! Sell some catches to keep fishing."
 	end
 
+	-- A new cast always replaces the old one, so a lost reply can never leave you stuck.
+	cancel(player)
 	nextToken += 1
-	local token = nextToken
-	local session: Pending = { token = token, state = "waiting", spotId = spotId }
+	local session: Session = {
+		token = nextToken,
+		state = "waiting",
+		target = target,
+		islandId = island.id,
+		spotId = if zone.spot then zone.spot.id else nil,
+	}
 	sessions[player] = session
 
 	-- Luck and the table are locked in at cast time, so the bait you cast with is the bait that counts.
-	local mods = modsFor(player, data, spotId)
+	-- The Perfect Cast flag is trusted from the client; its bonus is deliberately small.
+	local perks = PerkService.perks(player)
+	local loadout = { rod = data.rod, boat = data.boat, bait = data.baitEquipped }
+	local mods = Modifiers.compute(loadout, Zones.cast(zone, payload.perfect == true), Clock.env(), perks)
 	local weather = Clock.weather()
 	consumeBait(player, data)
+	fxEvent:FireAllClients({ kind = "cast", userId = player.UserId, target = target })
 
 	local delay = rng:NextNumber(Balance.BITE_DELAY[1], Balance.BITE_DELAY[2]) / mods.biteSpeed
 	task.delay(delay, function()
@@ -270,12 +299,14 @@ function handlers.Cast(player: Player, payload: any)
 		session.state = "reeling"
 		session.reelStart = os.clock()
 		session.minSeconds = (100 - params.start) / params.gain * Balance.MIN_REEL_FRACTION
-		biteEvent:FireClient(player, token, params)
+		biteEvent:FireClient(player, session.token, params)
+		fxEvent:FireAllClients({ kind = "bite", userId = player.UserId })
 	end)
 
 	return true, { delay = delay }
 end
 
+-- Returns the landed catch, or { lost = true, rarity } if she got away.
 function handlers.Reel(player: Player, payload: any)
 	local data = DataService.get(player)
 	local session = sessions[player]
@@ -298,12 +329,11 @@ function handlers.Reel(player: Player, payload: any)
 	end
 
 	if success then
-		land(player, data, session)
-	else
-		local character = Characters.byId[session.characterId :: string]
-		catchEvent:FireClient(player, { lost = true, rarity = character.rarity })
+		return true, land(player, data, session)
 	end
-	return true
+	fxEvent:FireAllClients({ kind = "clear", userId = player.UserId })
+	local character = Characters.byId[session.characterId :: string]
+	return true, { lost = true, rarity = character.rarity }
 end
 
 function handlers.CancelCast(player: Player)

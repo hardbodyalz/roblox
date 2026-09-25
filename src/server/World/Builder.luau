@@ -1,7 +1,8 @@
 --!strict
 -- Procedurally builds the ocean and every island from Islands.luau, so the map always matches
--- the fishing spots in config. This is placeholder art: swap any island for a hand-built model
--- later by keeping spot positions the same (Islands.spotPosition).
+-- the hotspots in config. This is placeholder art: swap any island for a hand-built model later by
+-- keeping spot positions the same (Islands.spotPosition) and tagging pond water with the "Water"
+-- attribute so casts can land in it.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -117,7 +118,7 @@ local function label(parent: BasePart, text: string, color: Color3, offset: numb
 	local t = Instance.new("TextLabel")
 	t.Size = UDim2.fromScale(1, 1)
 	t.BackgroundTransparency = 1
-	t.Font = Enum.Font.FredokaOne
+	t.FontFace = Font.new("rbxasset://fonts/families/BuilderSans.json", Enum.FontWeight.Heavy)
 	t.TextScaled = true
 	t.TextColor3 = color
 	t.TextStrokeTransparency = 0.3
@@ -207,31 +208,48 @@ end
 local function pond(parent: Instance, center: Vector3, topY: number, pal: Palette)
 	disk(parent, center, 17, 1.2, topY + 0.6, pal.stone, Enum.Material.Slate)
 	local water = disk(parent, center, 15, 0.4, topY + 0.8, pal.pond, Enum.Material.Glass)
+	water.Name = "PondWater"
 	water.Transparency = 0.25
 	water.Reflectance = 0.2
 	water.CanCollide = false
+	water:SetAttribute("Water", true)
 end
 
-local function spotMarker(parent: Instance, position: Vector3, spot: Islands.Spot, pal: Palette)
-	local anchor = part(parent, {
-		Name = "Spot_" .. spot.id,
-		Size = Vector3.new(1, 1, 1),
-		Position = position + Vector3.new(0, 4, 0),
+-- A ring of buoys marks the patch of sea a pier's hotspot covers.
+local function buoyRing(parent: Instance, center: Vector3, radius: number, pal: Palette)
+	local count = 12
+	for i = 1, count do
+		local a = i / count * math.pi * 2
+		local p = center + Vector3.new(math.cos(a) * radius, 0.3, math.sin(a) * radius)
+		local buoy = ball(parent, p, 1.4, if i % 2 == 0 then rgb(245, 245, 245) else pal.marker)
+		buoy.Name = "Buoy"
+		buoy.CanCollide = false
+		buoy.CanQuery = false -- casts pass through to the water
+	end
+end
+
+local function spotMarker(parent: Instance, position: Vector3, radius: number, spot: Islands.Spot, pal: Palette)
+	-- Invisible pad on the water: carries the label and emits a soft shimmer across the hotspot.
+	local pad = part(parent, {
+		Name = "Hotspot_" .. spot.id,
+		Size = Vector3.new(radius * 1.6, 0.2, radius * 1.6),
+		Position = position + Vector3.new(0, 0.4, 0),
 		Transparency = 1,
 		CanCollide = false,
 		CanQuery = false,
+		CanTouch = false,
 	})
-	anchor:SetAttribute("SpotId", spot.id)
-	label(anchor, "🎣 " .. spot.name, pal.marker, 6, 120)
-	local sparkle = Instance.new("ParticleEmitter")
-	sparkle.Rate = 6
-	sparkle.Lifetime = NumberRange.new(1.5, 2.5)
-	sparkle.Speed = NumberRange.new(1, 3)
-	sparkle.SpreadAngle = Vector2.new(180, 180)
-	sparkle.Size = NumberSequence.new(0.6, 0)
-	sparkle.Color = ColorSequence.new(pal.marker)
-	sparkle.LightEmission = 1
-	sparkle.Parent = anchor
+	pad:SetAttribute("SpotId", spot.id)
+	label(pad, "🎣 " .. spot.name .. "\n" .. spot.blurb, pal.marker, 7, 160)
+	local shimmer = Instance.new("ParticleEmitter")
+	shimmer.Rate = 10
+	shimmer.Lifetime = NumberRange.new(1.5, 2.5)
+	shimmer.Speed = NumberRange.new(0.5, 1.5)
+	shimmer.EmissionDirection = Enum.NormalId.Top
+	shimmer.Size = NumberSequence.new(0.5, 0)
+	shimmer.Color = ColorSequence.new(pal.marker)
+	shimmer.LightEmission = 1
+	shimmer.Parent = pad
 end
 
 -- Island landmarks ---------------------------------------------------------------
@@ -359,6 +377,7 @@ local function buildIsland(island: Island, parent: Instance)
 			local cloud = ball(model, c + Vector3.new(math.cos(a) * r, rng:NextNumber(-40, -12), math.sin(a) * r), rng:NextNumber(25, 55), rgb(255, 255, 255), Enum.Material.SmoothPlastic)
 			cloud.Transparency = 0.25
 			cloud.CanCollide = false
+			cloud.CanQuery = false
 		end
 	else
 		disk(model, c, island.radius, 30, topY - 1.5, pal.sand, Enum.Material.Sand)
@@ -429,12 +448,15 @@ local function buildIsland(island: Island, parent: Instance)
 
 	for _, spot in island.spots do
 		local sp = Islands.spotPosition(island, spot)
+		local hotspot = Islands.hotspotCenter(island, spot)
+		local radius = Islands.hotspotRadius(spot)
 		if spot.kind == "dock" then
 			dock(model, island, spot, pal)
-			spotMarker(model, Vector3.new(sp.X, c.Y, sp.Z), spot, pal)
+			buoyRing(model, Vector3.new(hotspot.X, c.Y, hotspot.Z), radius, pal)
+			spotMarker(model, Vector3.new(hotspot.X, c.Y, hotspot.Z), radius, spot, pal)
 		else
 			pond(model, Vector3.new(sp.X, 0, sp.Z), topY, pal)
-			spotMarker(model, Vector3.new(sp.X, topY, sp.Z), spot, pal)
+			spotMarker(model, Vector3.new(sp.X, topY + 0.8, sp.Z), radius, spot, pal)
 		end
 	end
 

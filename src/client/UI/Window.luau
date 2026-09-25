@@ -1,5 +1,5 @@
 --!strict
--- Shared window chrome. Only one window is open at a time.
+-- Shared window chrome. Only one window is open at a time; Escape-style toggling via open().
 
 local Players = game:GetService("Players")
 
@@ -9,6 +9,8 @@ local Window = {}
 
 local player = Players.LocalPlayer
 local C = Kit.Colors
+
+local HEADER = 48
 
 local gui = Kit.new("ScreenGui", {
 	Name = "Windows",
@@ -30,48 +32,51 @@ local current: Handle? = nil
 local openListeners: { (string) -> () } = {}
 
 function Window.create(name: string, title: string, size: Vector2): Handle
-	local frame = Kit.new("Frame", {
+	local frame = Kit.panel({
 		Name = name,
 		AnchorPoint = Vector2.new(0.5, 0.5),
-		Position = UDim2.fromScale(0.5, 0.52),
+		Position = UDim2.fromScale(0.5, 0.5),
 		Size = UDim2.fromOffset(size.X, size.Y),
-		BackgroundColor3 = C.panel,
-		BackgroundTransparency = 0.04,
+		BackgroundTransparency = 0.06,
 		Visible = false,
 		Parent = gui,
-	}, {
-		Kit.corner(16),
-		Kit.stroke(C.accent, 2, 0.4),
-		Kit.new("UISizeConstraint", { MaxSize = size }),
 	})
-	-- Fit small screens.
-	local scale = Kit.new("UIScale", { Parent = frame })
-	local function fit()
-		local camera = workspace.CurrentCamera
-		if camera then
-			local vp = camera.ViewportSize
-			scale.Scale = math.min(1, (vp.X - 20) / size.X, (vp.Y - 60) / size.Y)
-		end
-	end
-	fit()
-	if workspace.CurrentCamera then
-		workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(fit)
-	end
-
-	Kit.label({
-		Text = title,
-		Font = Kit.Font,
-		TextSize = 26,
-		Position = UDim2.fromOffset(18, 10),
-		Size = UDim2.new(1, -80, 0, 34),
+	Kit.new("UIGradient", {
+		Rotation = 90,
+		Color = ColorSequence.new(Color3.new(1, 1, 1), Color3.fromRGB(200, 205, 215)),
 		Parent = frame,
 	})
-	local close = Kit.button("✕", C.bad, { Size = UDim2.fromOffset(36, 36), AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -10, 0, 10), Parent = frame })
+	Kit.fitToScreen(frame, size)
+
+	Kit.label({
+		Text = string.upper(title),
+		FontFace = Kit.Title,
+		TextSize = 22,
+		Position = UDim2.fromOffset(18, 0),
+		Size = UDim2.new(1, -80, 0, HEADER),
+		Parent = frame,
+	})
+	local close = Kit.button("✕", C.panel2, {
+		Size = UDim2.fromOffset(32, 32),
+		AnchorPoint = Vector2.new(1, 0),
+		Position = UDim2.new(1, -10, 0, 8),
+		TextSize = 16,
+		Parent = frame,
+	})
+	Kit.new("Frame", {
+		Name = "Divider",
+		BackgroundColor3 = C.line,
+		BackgroundTransparency = 0.88,
+		BorderSizePixel = 0,
+		Position = UDim2.fromOffset(0, HEADER),
+		Size = UDim2.new(1, 0, 0, 1),
+		Parent = frame,
+	})
 	local content = Kit.new("Frame", {
 		Name = "Content",
 		BackgroundTransparency = 1,
-		Position = UDim2.fromOffset(16, 54),
-		Size = UDim2.new(1, -32, 1, -68),
+		Position = UDim2.fromOffset(16, HEADER + 12),
+		Size = UDim2.new(1, -32, 1, -(HEADER + 26)),
 		Parent = frame,
 	})
 
@@ -94,7 +99,9 @@ function Window.open(name: string)
 	end
 	Window.close()
 	current = handle
+	handle.frame.Position = UDim2.fromScale(0.5, 0.53)
 	handle.frame.Visible = true
+	Kit.tween(handle.frame, 0.18, { Position = UDim2.fromScale(0.5, 0.5) })
 	if handle.onOpen then
 		handle.onOpen()
 	end
@@ -129,8 +136,9 @@ function Window.scroller(parent: Instance, props: { [string]: any }?): Scrolling
 		Size = UDim2.fromScale(1, 1),
 		CanvasSize = UDim2.new(),
 		AutomaticCanvasSize = Enum.AutomaticSize.Y,
-		ScrollBarThickness = 6,
-		ScrollBarImageColor3 = C.accent,
+		ScrollBarThickness = 4,
+		ScrollBarImageColor3 = C.line,
+		ScrollBarImageTransparency = 0.6,
 		BorderSizePixel = 0,
 		Parent = parent,
 	}
@@ -150,40 +158,55 @@ function Window.clear(container: Instance)
 	end
 end
 
--- Row of tab buttons; calls onSelect(id). Returns a setter to highlight a tab.
+-- A list row: flat panel2 card.
+function Window.row(parent: Instance, order: number, height: number): Frame
+	return Kit.new("Frame", {
+		BackgroundColor3 = C.panel2,
+		BackgroundTransparency = 0.1,
+		BorderSizePixel = 0,
+		Size = UDim2.new(1, -8, 0, height),
+		LayoutOrder = order,
+		Parent = parent,
+	}, { Kit.corner(6), Kit.stroke(C.line, 1, 0.92) })
+end
+
+-- Row of pill tabs; calls onSelect(id). Returns a setter to highlight a tab.
 function Window.tabs(parent: Instance, items: { { id: string, name: string } }, onSelect: (string) -> ()): (string) -> ()
 	local bar = Kit.new("ScrollingFrame", {
 		BackgroundTransparency = 1,
-		Size = UDim2.new(1, 0, 0, 40),
+		Size = UDim2.new(1, 0, 0, 36),
 		CanvasSize = UDim2.new(),
 		AutomaticCanvasSize = Enum.AutomaticSize.X,
 		ScrollingDirection = Enum.ScrollingDirection.X,
-		ScrollBarThickness = 3,
+		ScrollBarThickness = 0,
 		BorderSizePixel = 0,
 		Parent = parent,
 	}, { Kit.list(6, true) })
 	local buttons: { [string]: TextButton } = {}
-	local function select(id: string)
+	local function highlight(id: string)
 		for bid, b in buttons do
-			b.BackgroundColor3 = if bid == id then C.accent else C.panel3
+			local on = bid == id
+			b.BackgroundColor3 = if on then C.text else C.panel2
+			b.TextColor3 = if on then C.panel else C.text
 		end
 	end
 	for i, item in items do
-		local b = Kit.button(item.name, C.panel3, {
-			Size = UDim2.fromOffset(0, 34),
+		local b = Kit.button(item.name, C.panel2, {
+			Size = UDim2.fromOffset(0, 30),
 			AutomaticSize = Enum.AutomaticSize.X,
-			TextSize = 16,
+			TextSize = 15,
 			LayoutOrder = i,
 			Parent = bar,
 		})
-		Kit.new("UIPadding", { PaddingLeft = UDim.new(0, 12), PaddingRight = UDim.new(0, 12), Parent = b })
+		Kit.new("UIPadding", { PaddingLeft = UDim.new(0, 14), PaddingRight = UDim.new(0, 14), Parent = b })
+		;(b:FindFirstChildOfClass("UICorner") :: UICorner).CornerRadius = UDim.new(1, 0)
 		buttons[item.id] = b
 		b.Activated:Connect(function()
-			select(item.id)
+			highlight(item.id)
 			onSelect(item.id)
 		end)
 	end
-	return select
+	return highlight
 end
 
 return Window

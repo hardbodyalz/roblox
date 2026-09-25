@@ -3,17 +3,18 @@
 -- client from Clock (shared time) + the replicated Weather attribute, and eased every frame.
 
 local Lighting = game:GetService("Lighting")
-local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
 local Shared = ReplicatedStorage.Shared
 local Islands = require(Shared.Config.Islands)
 local Clock = require(Shared.Clock)
+local Water = require(Shared.Water)
+
+local LocalCharacter = require(script.Parent.Parent.LocalCharacter)
 
 local Atmosphere = {}
 
-local player = Players.LocalPlayer
 local rgb = Color3.fromRGB
 
 type Look = {
@@ -99,7 +100,7 @@ emitterPart.CanQuery = false
 emitterPart.CanTouch = false
 emitterPart.Transparency = 1
 emitterPart.Size = Vector3.new(120, 1, 120)
-emitterPart.Parent = workspace
+emitterPart.Parent = Water.fxFolder()
 
 local function emitter(props: { [string]: any }): ParticleEmitter
 	local e = Instance.new("ParticleEmitter")
@@ -163,7 +164,7 @@ local function setVoidProps(active: boolean, around: Vector3?)
 			p.CFrame = CFrame.new(around + Vector3.new(rng:NextNumber(-70, 70), rng:NextNumber(10, 45), rng:NextNumber(-70, 70)))
 				* CFrame.Angles(rng:NextNumber(0, 6), rng:NextNumber(0, 6), rng:NextNumber(0, 6))
 			p:SetAttribute("Spin", rng:NextNumber(-0.6, 0.6))
-			p.Parent = workspace
+			p.Parent = Water.fxFolder()
 			table.insert(voidProps, p)
 		end
 	elseif not active and #voidProps > 0 then
@@ -189,13 +190,6 @@ end
 local lightningTimer = 0
 local glitchTimer = 0
 
-local function currentIsland(): string?
-	local character = player.Character
-	local root = character and character:FindFirstChild("HumanoidRootPart") :: BasePart?
-	local island = root and Islands.islandAt(root.Position)
-	return island and island.id
-end
-
 function Atmosphere.start()
 	Lighting.GlobalShadows = true
 	Lighting.EnvironmentDiffuseScale = 0.5
@@ -213,7 +207,7 @@ function Atmosphere.start()
 		islandCheck -= dt
 		if islandCheck <= 0 then
 			islandCheck = 0.5
-			islandId = currentIsland()
+			islandId = LocalCharacter.island()
 		end
 		local weatherId = Clock.weather()
 		local look = lookFor(weatherId, islandId)
@@ -262,7 +256,7 @@ function Atmosphere.start()
 			end
 		end
 
-		local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart") :: BasePart?
+		local root = LocalCharacter.root()
 		setVoidProps(weatherId == "HuecoVoid", root and root.Position)
 		for _, p in voidProps do
 			p.CFrame *= CFrame.Angles(0, (p:GetAttribute("Spin") :: number) * dt, 0)

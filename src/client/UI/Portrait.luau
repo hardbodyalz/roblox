@@ -4,34 +4,14 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local Config = ReplicatedStorage.Shared.Config
-local Characters = require(Config.Characters)
-local Mutations = require(Config.Mutations)
-local Rarities = require(Config.Rarities)
+local Shared = ReplicatedStorage.Shared
+local Mutations = require(Shared.Config.Mutations)
+local Rarities = require(Shared.Config.Rarities)
+local Characters = require(Shared.Config.Characters)
+local Appearance = require(Shared.Appearance)
 local Kit = require(script.Parent.Kit)
 
 local Portrait = {}
-
-local SKIN = Color3.fromRGB(255, 226, 205)
-
-local MUTATION_TINT: { [string]: { tint: Color3, amount: number } } = {
-	Golden = { tint = Color3.fromRGB(255, 200, 50), amount = 0.45 },
-	Diamond = { tint = Color3.fromRGB(150, 240, 255), amount = 0.45 },
-	Ethereal = { tint = Color3.fromRGB(220, 200, 255), amount = 0.4 },
-	Celestial = { tint = Color3.fromRGB(255, 245, 200), amount = 0.5 },
-	Void = { tint = Color3.fromRGB(60, 0, 110), amount = 0.6 },
-}
-
-local function tint(color: Color3, mutationId: string?): Color3
-	if mutationId == "Mystery" then
-		return Color3.new(1 - color.R, 1 - color.G, 1 - color.B)
-	end
-	local t = mutationId and MUTATION_TINT[mutationId]
-	if t then
-		return color:Lerp(t.tint, t.amount)
-	end
-	return color
-end
 
 local function shape(parent: Instance, props: { [string]: any }, radius: number?): Frame
 	local f = Kit.new("Frame", props)
@@ -47,10 +27,12 @@ function Portrait.create(characterId: string, mutationId: string?, silhouette: b
 	local rarity = Rarities.byId[character.rarity]
 	local mutation = mutationId and Mutations.byId[mutationId]
 
-	local hair = if silhouette then Color3.new(0.05, 0.05, 0.08) else tint(character.hair, mutationId)
-	local outfit = if silhouette then Color3.new(0.05, 0.05, 0.08) else tint(character.outfit, mutationId)
-	local eyes = if silhouette then Color3.new(0.05, 0.05, 0.08) else tint(character.eyes, mutationId)
-	local skin = if silhouette then Color3.new(0.07, 0.07, 0.1) else tint(SKIN, mutationId)
+	local palette = Appearance.palette(characterId, mutationId)
+	local shadow = Color3.new(0.05, 0.05, 0.08)
+	local hair = if silhouette then shadow else palette.hair
+	local outfit = if silhouette then shadow else palette.outfit
+	local eyes = if silhouette then shadow else palette.eyes
+	local skin = if silhouette then Color3.new(0.07, 0.07, 0.1) else palette.skin
 
 	local root = Kit.new("Frame", {
 		Name = "Portrait",
@@ -86,7 +68,7 @@ function Portrait.create(characterId: string, mutationId: string?, silhouette: b
 	if silhouette then
 		Kit.label({
 			Text = "?",
-			Font = Kit.Font,
+			FontFace = Kit.Title,
 			TextScaled = true,
 			TextColor3 = Color3.fromRGB(120, 110, 150),
 			TextXAlignment = Enum.TextXAlignment.Center,
@@ -96,7 +78,7 @@ function Portrait.create(characterId: string, mutationId: string?, silhouette: b
 			Parent = root,
 		})
 	elseif mutation and mutation.id ~= "Normal" then
-		local border = Kit.stroke(Color3.new(1, 1, 1), 3)
+		local border = Kit.stroke(Color3.new(1, 1, 1), 3, 0)
 		Kit.gradient(mutation.color, mutation.color2, true).Parent = border
 		border.Parent = root
 		if mutation.id == "Shiny" or mutation.id == "Diamond" or mutation.id == "Celestial" then

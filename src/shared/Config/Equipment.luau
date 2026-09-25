@@ -2,6 +2,8 @@
 -- Rods, boats, bait and storage. Passive *effects* are implemented in Modifiers.luau,
 -- keyed by passive id; this file only holds the numbers and the text players read.
 
+local rgb = Color3.fromRGB
+
 export type Passive = { id: string, name: string, desc: string }
 
 export type Rod = {
@@ -13,6 +15,9 @@ export type Rod = {
 	resilience: number,
 	maxKg: number,
 	speed: number, -- % faster bites
+	castRange: number, -- studs at full cast power
+	color: Color3, -- rod model colours
+	accent: Color3,
 	passive: Passive,
 	secret: boolean?,
 }
@@ -41,43 +46,53 @@ export type Bait = {
 
 local rods: { Rod } = {
 	{
-		id = "old_rod", name = "Old Rod", price = 0, luck = 5, control = 15, resilience = 10, maxKg = 25, speed = 0,
+		id = "old_rod", name = "Old Rod", price = 0, luck = 5, control = 15, resilience = 10, maxKg = 25, speed = 0, castRange = 35,
+		color = rgb(120, 85, 55), accent = rgb(200, 200, 205),
 		passive = { id = "beginners_fortune", name = "Beginner's Fortune", desc = "Small chance to gain bonus Yen from low-rarity catches." },
 	},
 	{
-		id = "sakura_rod", name = "Sakura Rod", price = 5000, luck = 15, control = 25, resilience = 15, maxKg = 50, speed = 5,
+		id = "sakura_rod", name = "Sakura Rod", price = 5000, luck = 15, control = 25, resilience = 15, maxKg = 50, speed = 5, castRange = 40,
+		color = rgb(255, 180, 210), accent = rgb(255, 255, 255),
 		passive = { id = "sakura_blessing", name = "Sakura Blessing", desc = "Slightly increased mutation weighting at Sakura Shore." },
 	},
 	{
-		id = "driftwood_rod", name = "Driftwood Rod", price = 20000, luck = 25, control = 30, resilience = 20, maxKg = 75, speed = 15,
+		id = "driftwood_rod", name = "Driftwood Rod", price = 20000, luck = 25, control = 30, resilience = 20, maxKg = 75, speed = 15, castRange = 50,
+		color = rgb(160, 140, 110), accent = rgb(90, 180, 200),
 		passive = { id = "tidecaller", name = "Tidecaller", desc = "Bites come a further 15% faster." },
 	},
 	{
-		id = "torii_rod", name = "Torii Rod", price = 60000, luck = 35, control = 30, resilience = 30, maxKg = 120, speed = 10,
+		id = "torii_rod", name = "Torii Rod", price = 60000, luck = 35, control = 30, resilience = 30, maxKg = 120, speed = 10, castRange = 50,
+		color = rgb(210, 45, 40), accent = rgb(30, 25, 25),
 		passive = { id = "shrine_ward", name = "Shrine Ward", desc = "Shrine-themed Waifus receive increased encounter weighting." },
 	},
 	{
-		id = "kitsune_rod", name = "Kitsune Rod", price = 120000, luck = 45, control = 35, resilience = 25, maxKg = 150, speed = 10,
+		id = "kitsune_rod", name = "Kitsune Rod", price = 120000, luck = 45, control = 35, resilience = 25, maxKg = 150, speed = 10, castRange = 55,
+		color = rgb(255, 150, 60), accent = rgb(255, 245, 230),
 		passive = { id = "foxfire", name = "Foxfire", desc = "Fox Waifus receive greatly increased encounter weighting." },
 	},
 	{
-		id = "demon_rod", name = "Demon Rod", price = 250000, luck = 55, control = 40, resilience = 35, maxKg = 200, speed = 10,
+		id = "demon_rod", name = "Demon Rod", price = 250000, luck = 55, control = 40, resilience = 35, maxKg = 200, speed = 10, castRange = 55,
+		color = rgb(60, 20, 25), accent = rgb(230, 40, 50),
 		passive = { id = "infernal_attraction", name = "Infernal Attraction", desc = "Demon-themed Waifus receive increased encounter weighting." },
 	},
 	{
-		id = "moonlight_rod", name = "Moonlight Rod", price = 500000, luck = 70, control = 45, resilience = 40, maxKg = 250, speed = 15,
+		id = "moonlight_rod", name = "Moonlight Rod", price = 500000, luck = 70, control = 45, resilience = 40, maxKg = 250, speed = 15, castRange = 60,
+		color = rgb(70, 80, 150), accent = rgb(200, 210, 255),
 		passive = { id = "lunar_blessing", name = "Lunar Blessing", desc = "+15% Luck at night. Extra mutation weighting during a Full Moon." },
 	},
 	{
-		id = "celestial_rod", name = "Celestial Rod", price = 1000000, luck = 100, control = 60, resilience = 60, maxKg = 500, speed = 20,
+		id = "celestial_rod", name = "Celestial Rod", price = 1000000, luck = 100, control = 60, resilience = 60, maxKg = 500, speed = 20, castRange = 70,
+		color = rgb(250, 245, 230), accent = rgb(255, 205, 80),
 		passive = { id = "divine_favor", name = "Divine Favor", desc = "Improves weighting for Divine and Eternal Waifus." },
 	},
 	{
-		id = "void_rod", name = "Void Rod", price = 10000000, luck = 180, control = 90, resilience = 90, maxKg = 1000, speed = 25,
+		id = "void_rod", name = "Void Rod", price = 10000000, luck = 180, control = 90, resilience = 90, maxKg = 1000, speed = 25, castRange = 80,
+		color = rgb(25, 10, 40), accent = rgb(170, 60, 255),
 		passive = { id = "rift_fishing", name = "Rift Fishing", desc = "During Hueco Void: massively improved Void fishing." },
 	},
 	{
-		id = "secret_rod", name = "???", price = nil, luck = 250, control = 100, resilience = 100, maxKg = 2000, speed = 30, secret = true,
+		id = "secret_rod", name = "???", price = nil, luck = 250, control = 100, resilience = 100, maxKg = 2000, speed = 30, castRange = 90,
+		color = rgb(10, 10, 12), accent = rgb(255, 255, 255), secret = true,
 		passive = { id = "unknown_passive", name = "???", desc = "???" },
 	},
 }

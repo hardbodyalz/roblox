@@ -15,7 +15,7 @@ local AchievementsWindow = {}
 
 local C = Kit.Colors
 
-local handle = Window.create("Achievements", "🏆 Achievements", Vector2.new(640, 540))
+local handle = Window.create("Achievements", "Achievements", Vector2.new(640, 540))
 local content = handle.content
 
 local stats = Kit.label({ Size = UDim2.new(1, 0, 0, 44), TextSize = 15, TextColor3 = C.muted, Parent = content })
@@ -37,13 +37,13 @@ function AchievementsWindow.refresh()
 	Window.clear(list)
 	for i, achievement in Achievements.list do
 		local done = data.achievements[achievement.id] == true
-		local row = Kit.new("Frame", {
-			BackgroundColor3 = if done then C.panel3 else C.panel2,
-			Size = UDim2.new(1, -10, 0, 54),
-			LayoutOrder = i,
-			Parent = list,
-		}, { Kit.corner(10), Kit.stroke(if done then C.gold else C.panel3, 2, 0.3) })
-		Kit.label({ Text = (if done then "🏆 " else "🔒 ") .. achievement.name, Font = Kit.Font, TextSize = 18, TextColor3 = if done then C.gold else C.text, Position = UDim2.fromOffset(12, 6), Size = UDim2.new(1, -24, 0, 22), Parent = row })
+		local row = Window.row(list, i, 54)
+		if done then
+			local stroke = row:FindFirstChildOfClass("UIStroke") :: UIStroke
+			stroke.Color = C.gold
+			stroke.Transparency = 0.4
+		end
+		Kit.label({ Text = (if done then "🏆 " else "🔒 ") .. achievement.name, FontFace = Kit.Title, TextSize = 18, TextColor3 = if done then C.gold else C.text, Position = UDim2.fromOffset(12, 6), Size = UDim2.new(1, -24, 0, 22), Parent = row })
 		Kit.label({ Text = achievement.desc, TextSize = 14, TextColor3 = C.muted, Position = UDim2.fromOffset(12, 28), Size = UDim2.new(1, -24, 0, 20), Parent = row })
 	end
 end

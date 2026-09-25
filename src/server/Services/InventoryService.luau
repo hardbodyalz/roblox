@@ -9,18 +9,11 @@ local Net = require(Shared.Net)
 local DataService = require(script.Parent.DataService)
 local PerkService = require(script.Parent.PerkService)
 local AchievementService = require(script.Parent.AchievementService)
+local Leaderstats = require(script.Parent.Leaderstats)
 
 local InventoryService = {}
 
 local notify = Net.event("Notify")
-
-local function updateLeaderstats(player: Player, data: DataService.Profile)
-	local leaderstats = player:FindFirstChild("leaderstats")
-	local yen = leaderstats and leaderstats:FindFirstChild("Yen") :: IntValue?
-	if yen then
-		yen.Value = data.yen
-	end
-end
 
 function InventoryService.addYen(player: Player, amount: number)
 	local data = DataService.get(player)
@@ -32,7 +25,7 @@ function InventoryService.addYen(player: Player, amount: number)
 		data.totalYen += amount
 	end
 	DataService.push(player, "yen", "totalYen")
-	updateLeaderstats(player, data)
+	Leaderstats.set(player, "Yen", data.yen)
 end
 
 function InventoryService.spend(player: Player, amount: number): boolean

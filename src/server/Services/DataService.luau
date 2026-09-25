@@ -21,7 +21,8 @@ export type Item = {
 	w: number, -- kg
 	v: number, -- value (before Yen multipliers)
 	l: boolean, -- locked
-	s: string, -- spot id
+	i: string?, -- island whose waters she came from (older saves only have s)
+	s: string?, -- hotspot id, if cast into one
 	x: string, -- weather when caught
 	t: number, -- os.time()
 	f: boolean?, -- Beginner's Fortune bonus applied

@@ -19,7 +19,7 @@ local CollectionWindow: any = {}
 
 local C = Kit.Colors
 
-local handle = Window.create("Collection", "📖 Collection Book", Vector2.new(860, 580))
+local handle = Window.create("Collection", "Collection Book", Vector2.new(860, 580))
 local content = handle.content
 
 local pageId = "sakura_shore"
@@ -33,17 +33,18 @@ local setTab = Window.tabs(content, pages, function(id)
 end)
 setTab(pageId)
 
-local progressLabel = Kit.label({ Position = UDim2.fromOffset(0, 44), Size = UDim2.new(0.6, 0, 0, 24), TextSize = 17, Font = Kit.Bold, Parent = content })
+local progressLabel = Kit.label({ Position = UDim2.fromOffset(0, 44), Size = UDim2.new(0.6, 0, 0, 24), TextSize = 17, FontFace = Kit.Bold, Parent = content })
 
 local grid = Window.scroller(content, { Position = UDim2.fromOffset(0, 74), Size = UDim2.new(0.6, -8, 1, -74) })
 Kit.new("UIGridLayout", { CellSize = UDim2.fromOffset(118, 150), CellPadding = UDim2.fromOffset(8, 8), SortOrder = Enum.SortOrder.LayoutOrder, Parent = grid })
 
 local detail = Kit.new("Frame", {
 	BackgroundColor3 = C.panel2,
+	BackgroundTransparency = 0.1,
 	Position = UDim2.new(0.6, 0, 0, 44),
 	Size = UDim2.new(0.4, 0, 1, -44),
 	Parent = content,
-}, { Kit.corner(12), Kit.padding(12) })
+}, { Kit.corner(8), Kit.padding(12) })
 
 local function renderDetail()
 	Window.clear(detail)
@@ -58,18 +59,18 @@ local function renderDetail()
 
 	local holder = Kit.new("Frame", { BackgroundTransparency = 1, Size = UDim2.fromOffset(110, 110), LayoutOrder = 1, Parent = list })
 	Portrait.create(selected, nil, found == nil).Parent = holder
-	Kit.label({ Text = if found then string.upper(character.name) else "???", Font = Kit.Font, TextSize = 22, TextColor3 = rarity.color, Size = UDim2.new(1, 0, 0, 26), LayoutOrder = 2, Parent = list })
+	Kit.label({ Text = if found then string.upper(character.name) else "???", FontFace = Kit.Title, TextSize = 22, TextColor3 = rarity.color, Size = UDim2.new(1, 0, 0, 26), LayoutOrder = 2, Parent = list })
 	Kit.label({ Text = "Rarity: " .. Kit.color(rarity.name, rarity.color) .. "   Discovered: " .. (if found then Kit.color("✓", C.good) else "???"), TextSize = 14, Size = UDim2.new(1, 0, 0, 18), LayoutOrder = 3, Parent = list })
 	if found then
 		Kit.label({ Text = table.concat(character.look, " · ") .. "\n<i>" .. character.personality .. "</i>", TextSize = 13, TextColor3 = C.muted, Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, LayoutOrder = 4, Parent = list })
 	end
-	Kit.label({ Text = "Mutations", Font = Kit.Font, TextSize = 18, Size = UDim2.new(1, 0, 0, 24), LayoutOrder = 5, Parent = list })
+	Kit.label({ Text = "Mutations", FontFace = Kit.Title, TextSize = 18, Size = UDim2.new(1, 0, 0, 24), LayoutOrder = 5, Parent = list })
 	for i, mutation in Mutations.list do
 		local has = found ~= nil and found[mutation.id] == true
 		Kit.label({
 			Text = (if has then Kit.color(mutation.name, mutation.color) .. "  " .. Kit.color("✓", C.good) else Kit.color(mutation.name, C.muted) .. "  ???"),
 			TextSize = 15,
-			Font = Kit.Bold,
+			FontFace = Kit.Bold,
 			Size = UDim2.new(1, 0, 0, 18),
 			LayoutOrder = 5 + i,
 			Parent = list,
@@ -92,7 +93,7 @@ local function card(characterId: string, order: number)
 	Portrait.create(characterId, nil, found == nil).Parent = holder
 	Kit.label({
 		Text = if found then character.name else (if character.hidden then "???" else character.name .. " ???"),
-		Font = Kit.Font,
+		FontFace = Kit.Title,
 		TextSize = 14,
 		TextColor3 = if found then rarity.color else C.muted,
 		TextXAlignment = Enum.TextXAlignment.Center,

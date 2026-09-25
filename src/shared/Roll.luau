@@ -8,15 +8,9 @@ local Rarities = require(Config.Rarities)
 local Mutations = require(Config.Mutations)
 local Islands = require(Config.Islands)
 local Balance = require(Config.Balance)
+local Modifiers = require(script.Parent.Modifiers)
 
-type Mods = {
-	luck: number,
-	mutationMult: number,
-	mutationBoost: { [string]: number },
-	tagBoost: { [string]: number },
-	rarityBoost: { [string]: number },
-	moonPhase: string,
-}
+type Mods = Modifiers.Mods
 
 export type Weighted = { id: string, w: number }
 
@@ -37,12 +31,12 @@ end
 function Roll.characterWeights(islandId: string, weather: string, mods: Mods): { Weighted }
 	local island = Islands.byId[islandId]
 	local out: { Weighted } = {}
-	local function add(entries: { Islands.TableEntry })
+	local function add(entries: { Islands.TableEntry }, mult: number)
 		for _, entry in entries do
 			if entryAvailable(entry, weather, mods.moonPhase) then
 				local character = Characters.byId[entry.id]
 				local rarity = Rarities.byId[character.rarity]
-				local w = entry.w
+				local w = entry.w * mult
 				if entry.moonBoost then
 					w *= entry.moonBoost[mods.moonPhase] or 1
 				end
@@ -55,8 +49,8 @@ function Roll.characterWeights(islandId: string, weather: string, mods: Mods): {
 			end
 		end
 	end
-	add(island.table)
-	add(Islands.globalTable)
+	add(island.table, 1)
+	add(Islands.globalTable, mods.secretMult)
 	return out
 end
 

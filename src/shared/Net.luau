@@ -5,16 +5,17 @@
 --   Request (RemoteFunction): (action: string, payload: any) -> (ok: boolean, result: any)
 -- Server -> Client:
 --   Sync         full state or a patch of it
---   Bite         a Waifu is on the line; start the minigame
---   CatchResult  a landed (or lost) catch
+--   Bite         a Waifu is on the line; start the shake + reel minigame
 --   Notify       small toast
 --   Announce     server-wide banner (rare catches, weather)
 --   Travel       play the sailing transition
+--   FishingFx    everyone's bobbers and catches, so the whole server sees Waifus surface:
+--                { kind = "cast" | "bite" | "catch" | "clear", userId, target?, c?, m?, w? }
 
 local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local EVENTS = { "Sync", "Bite", "CatchResult", "Notify", "Announce", "Travel" }
+local EVENTS = { "Sync", "Bite", "Notify", "Announce", "Travel", "FishingFx" }
 local FUNCTIONS = { "Request" }
 
 local Net = {}
